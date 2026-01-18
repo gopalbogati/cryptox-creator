@@ -1,0 +1,10 @@
+{
+    "version": 2,
+    "name": "cryptox-creator",
+    "builds": [
+        {
+            "src": "**/*",
+            "use": "@vercel/static"
+        }
+    ]
+}
