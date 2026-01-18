@@ -1,5 +1,5 @@
 // CryptoX Creator - Main Application
-// Viral Content Generator for X/Twitter
+// Viral Content Generator for X/Twitter with AI
 
 // ===== App State =====
 const AppState = {
@@ -8,10 +8,113 @@ const AppState = {
     contentType: 'tweet',
     library: JSON.parse(localStorage.getItem('cryptox_library') || '[]'),
     scheduled: JSON.parse(localStorage.getItem('cryptox_scheduled') || '[]'),
-    stats: JSON.parse(localStorage.getItem('cryptox_stats') || '{"posts":0,"threads":0,"scheduled":0}')
+    stats: JSON.parse(localStorage.getItem('cryptox_stats') || '{"posts":0,"threads":0,"scheduled":0}'),
+    apiKey: localStorage.getItem('cryptox_api_key') || ''
 };
 
-// ===== Crypto Content Templates =====
+// ===== Gemini API Configuration =====
+const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+
+// ===== Content Prompts for AI =====
+const ContentPrompts = {
+    bullish: (topic, context) => `Generate a viral, bullish crypto tweet about ${topic}. 
+Make it exciting and optimistic. Use emojis strategically. 
+Keep it under 280 characters. 
+${context ? `Additional context: ${context}` : ''}
+Make it sound like a confident crypto influencer. Include a call-to-action.`,
+
+    educational: (topic, context) => `Generate an educational crypto tweet about ${topic}. 
+Break down a complex concept simply. Use numbered points or bullet emojis.
+Keep it under 280 characters.
+${context ? `Additional context: ${context}` : ''}
+Make it informative yet engaging. End with "Bookmark this 📚"`,
+
+    analytical: (topic, context) => `Generate an analytical crypto tweet about ${topic}.
+Include technical analysis language (support, resistance, RSI, MACD hints).
+Keep it under 280 characters. Use chart emojis 📊📈
+${context ? `Additional context: ${context}` : ''}
+End with "NFA" (Not Financial Advice).`,
+
+    news: (topic, context) => `Generate a breaking news style crypto tweet about ${topic}.
+Start with 🚨 BREAKING or "Just in:"
+Keep it under 280 characters.
+${context ? `Additional context: ${context}` : ''}
+Make it urgent and newsworthy. Ask for reactions in replies.`,
+
+    controversial: (topic, context) => `Generate a controversial/hot take crypto tweet about ${topic}.
+Challenge popular opinion. Be provocative but not offensive.
+Keep it under 280 characters.
+${context ? `Additional context: ${context}` : ''}
+End with "Change my mind 👇" or "Fight me in the replies 🔥"`,
+
+    humorous: (topic, context) => `Generate a funny crypto tweet about ${topic}.
+Use humor crypto twitter loves (portfolio jokes, diamond hands, ape jokes).
+Keep it under 280 characters.
+${context ? `Additional context: ${context}` : ''}
+Use emojis like 🤡 📉 💀 appropriately.`
+};
+
+const ThreadPrompts = {
+    generate: (topic, length) => `Generate a viral crypto Twitter thread about "${topic}".
+
+Create exactly ${length} tweets for a thread. Each tweet should:
+- Be under 280 characters
+- Flow naturally from one to the next
+- First tweet is the hook with 🧵
+
+Structure:
+1. Hook tweet (attention-grabbing opener)
+2-${length - 1}. Body tweets (insights, data, arguments)  
+${length}. Conclusion with call-to-action (like, follow, retweet)
+
+Separate each tweet with "---TWEET---"
+
+Make it engaging, informative, and share-worthy.`
+};
+
+const ReplyPrompts = {
+    agree: (original) => `Generate 3 different reply tweets that AGREE with and add value to this tweet:
+"${original}"
+
+Each reply should:
+- Be under 280 characters
+- Add genuine insight or perspective
+- Sound authentic, not generic
+
+Separate replies with "---REPLY---"`,
+
+    question: (original) => `Generate 3 different thought-provoking question replies to this tweet:
+"${original}"
+
+Each reply should:
+- Be under 280 characters
+- Ask a smart follow-up question
+- Encourage further discussion
+
+Separate replies with "---REPLY---"`,
+
+    insight: (original) => `Generate 3 different insightful replies to this tweet:
+"${original}"
+
+Each reply should:
+- Be under 280 characters
+- Share unique data or perspective
+- Add value to the conversation
+
+Separate replies with "---REPLY---"`,
+
+    humor: (original) => `Generate 3 different witty/funny replies to this tweet:
+"${original}"
+
+Each reply should:
+- Be under 280 characters
+- Use crypto Twitter humor
+- Be clever, not cringy
+
+Separate replies with "---REPLY---"`
+};
+
+// ===== Fallback Templates (when no API key) =====
 const ContentTemplates = {
     bullishTweet: [
         "🚀 {coin} is showing incredible strength right now.\n\nHere's why the next leg up could be massive:\n\n• Strong support at current levels\n• Volume increasing significantly\n• Smart money accumulating\n\nThis is not financial advice, but I'm watching closely. 👀",
@@ -20,28 +123,23 @@ const ContentTemplates = {
     ],
     educationalTweet: [
         "Let me explain {topic} in simple terms 🧵\n\nMost people get this wrong.\n\nHere's what you need to know:\n\n1️⃣ The basics matter\n2️⃣ Risk management is key\n3️⃣ DYOR always\n\nBookmark this for later 📚",
-        "{topic} 101:\n\nIf you don't understand this, you'll lose money.\n\n• Start with fundamentals\n• Learn market cycles\n• Never invest more than you can afford to lose\n\nSave this thread 💾",
-        "The biggest mistake in {topic}?\n\nNot understanding the technology.\n\nHere's a 2-minute crash course:\n\n🔹 Key concept 1\n🔹 Key concept 2\n🔹 Key concept 3\n\nNow you're ahead of 90% of people 🎓"
+        "{topic} 101:\n\nIf you don't understand this, you'll lose money.\n\n• Start with fundamentals\n• Learn market cycles\n• Never invest more than you can afford to lose\n\nSave this thread 💾"
     ],
     analyticalTweet: [
         "📊 {coin} Technical Analysis\n\nKey levels to watch:\n\n• Resistance: $XX,XXX\n• Support: $XX,XXX\n\nRSI showing bullish divergence.\nMACD crossing bullish.\n\nMy take: Cautiously optimistic.\n\nNFA 📈",
-        "Let's break down the {coin} chart:\n\n🔍 What I'm seeing:\n• Price consolidating in a triangle\n• Volume decreasing (typical before breakout)\n• Key moving averages converging\n\nBreakout imminent? Time will tell 🎯",
-        "{coin} On-Chain Analysis:\n\n📈 Addresses: Growing\n💰 Whale wallets: Accumulating  \n🔄 Exchange outflows: Increasing\n\nThe data doesn't lie.\n\nWhat does this tell us? 🤔"
+        "Let's break down the {coin} chart:\n\n🔍 What I'm seeing:\n• Price consolidating in a triangle\n• Volume decreasing (typical before breakout)\n• Key moving averages converging\n\nBreakout imminent? Time will tell 🎯"
     ],
     newsTweet: [
         "🚨 BREAKING: {topic}\n\nThis could be huge for crypto.\n\nHere's what you need to know:\n\n• Impact on markets\n• What it means for investors\n• Next steps to watch\n\nStay tuned for updates 📡",
-        "Just in: {topic}\n\nThe crypto market is reacting.\n\n⬆️ Winners: \n⬇️ Losers: \n\nWhat's your take on this? 👇",
-        "MAJOR NEWS: {topic}\n\nThis changes everything.\n\nWhy it matters:\n1. Institutional implications\n2. Regulatory considerations\n3. Market sentiment shift\n\nBuckle up 🎢"
+        "Just in: {topic}\n\nThe crypto market is reacting.\n\n⬆️ Winners: \n⬇️ Losers: \n\nWhat's your take on this? 👇"
     ],
     controversialTweet: [
         "Hot take: {topic} is overrated.\n\nHear me out before you rage in the comments 👇\n\nThe problem is...\n\nChange my mind in the replies 🔥",
-        "99% of crypto influencers won't tell you this about {topic}.\n\nWhy? Because it hurts their bags.\n\nBut I'm going to be real with you...\n\nThread 🧵👇",
-        "Unpopular opinion:\n\n{topic}\n\nI know this will upset some people, but someone needs to say it.\n\nRoast me in the replies 🔥"
+        "99% of crypto influencers won't tell you this about {topic}.\n\nWhy? Because it hurts their bags.\n\nBut I'm going to be real with you...\n\nThread 🧵👇"
     ],
     humorousTweet: [
         "Me checking my {coin} portfolio every 5 minutes:\n\n😐📱\n😟📱\n🥺📱\n😭📱\n🤡📱\n\nWe're all gonna make it... right? 😅",
-        "POV: You just explained {topic} to your family at dinner\n\nThem: 👁️👄👁️\n\nMe: \"So anyway, that's why I'm not selling\" 🚀",
-        "Crypto Twitter at 3am:\n\n{topic}\n\nMe: *sets alarm for 4am to check charts*\n\nWe're definitely not addicted 🤡"
+        "POV: You just explained {topic} to your family at dinner\n\nThem: 👁️👄👁️\n\nMe: \"So anyway, that's why I'm not selling\" 🚀"
     ]
 };
 
@@ -135,6 +233,24 @@ const SectionTemplates = {
                 <div class="stat-card"><div class="stat-icon">📅</div><div class="stat-info"><span class="stat-value" id="scheduledPosts">0</span><span class="stat-label">Scheduled</span></div></div>
                 <div class="stat-card"><div class="stat-icon">💾</div><div class="stat-info"><span class="stat-value" id="savedContent">0</span><span class="stat-label">Saved Content</span></div></div>
             </div>
+            <div class="api-setup-card" id="apiSetupCard">
+                <div class="api-setup-header">
+                    <span class="api-icon">🔑</span>
+                    <h3>Setup AI Content Generation</h3>
+                </div>
+                <p class="api-setup-desc">Get your FREE Google Gemini API key (no credit card required) for AI-powered content generation.</p>
+                <div class="api-input-row">
+                    <input type="password" class="form-input api-key-input" id="apiKeyInput" placeholder="Paste your Gemini API key here...">
+                    <button class="btn-primary" id="saveApiKey">Save Key</button>
+                </div>
+                <div class="api-status" id="apiStatus">
+                    <span class="status-dot"></span>
+                    <span class="status-text">No API key configured</span>
+                </div>
+                <a href="https://aistudio.google.com/apikey" target="_blank" class="api-get-key">
+                    → Get your FREE API key from Google AI Studio
+                </a>
+            </div>
             <div class="dashboard-grid">
                 <div class="dashboard-card quick-actions">
                     <h3 class="card-title">⚡ Quick Actions</h3>
@@ -157,7 +273,7 @@ const SectionTemplates = {
             <div class="generator-container">
                 <div class="generator-form">
                     <h2 class="section-title">✨ AI Content Generator</h2>
-                    <p class="section-subtitle">Generate viral crypto content in seconds</p>
+                    <p class="section-subtitle">Generate viral crypto content with real AI</p>
                     <div class="form-group"><label class="form-label">Content Type</label>
                         <div class="content-type-selector">
                             <button class="type-btn active" data-type="tweet"><span>📝</span> Tweet</button>
@@ -190,7 +306,7 @@ const SectionTemplates = {
     threads: `
         <section class="section" id="section-threads">
             <h2 class="section-title">🧵 Thread Builder</h2>
-            <p class="section-subtitle">Create engaging Twitter threads that go viral</p>
+            <p class="section-subtitle">Create engaging Twitter threads with AI</p>
             <div class="thread-controls">
                 <div class="form-group"><label class="form-label">Thread Topic</label><input type="text" class="form-input" id="threadTopic" placeholder="e.g., 5 reasons why Bitcoin will hit $200k"></div>
                 <div class="thread-options">
@@ -262,7 +378,7 @@ const SectionTemplates = {
     replies: `
         <section class="section" id="section-replies">
             <h2 class="section-title">💬 Smart Reply Generator</h2>
-            <p class="section-subtitle">Generate engaging replies to boost visibility</p>
+            <p class="section-subtitle">Generate engaging replies with AI</p>
             <div class="reply-container">
                 <div class="reply-form">
                     <div class="form-group"><label class="form-label">Original Tweet</label><textarea class="form-textarea" id="originalTweet" placeholder="Paste the tweet you want to reply to..."></textarea></div>
@@ -293,6 +409,39 @@ function initApp() {
     setupMobileMenu();
     fetchCryptoPrices();
     updateStats();
+}
+
+// ===== Gemini API Call =====
+async function callGeminiAPI(prompt) {
+    if (!AppState.apiKey) {
+        throw new Error('No API key configured. Please add your Gemini API key in the Dashboard.');
+    }
+
+    const response = await fetch(`${GEMINI_API_URL}?key=${AppState.apiKey}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            contents: [{
+                parts: [{
+                    text: prompt
+                }]
+            }],
+            generationConfig: {
+                temperature: 0.9,
+                maxOutputTokens: 1024
+            }
+        })
+    });
+
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error?.message || 'API request failed');
+    }
+
+    const data = await response.json();
+    return data.candidates[0].content.parts[0].text;
 }
 
 // ===== Navigation =====
@@ -355,9 +504,18 @@ async function fetchCryptoPrices() {
     try {
         const btcEl = document.getElementById('btcPrice');
         const ethEl = document.getElementById('ethPrice');
-        // Simulated prices for demo (in production, use CoinGecko API)
-        btcEl.innerHTML = '<span class="ticker-icon">₿</span><span>$97,450</span>';
-        ethEl.innerHTML = '<span class="ticker-icon">Ξ</span><span>$3,280</span>';
+
+        // Try to fetch real prices
+        try {
+            const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd');
+            const data = await response.json();
+            btcEl.innerHTML = `<span class="ticker-icon">₿</span><span>$${data.bitcoin.usd.toLocaleString()}</span>`;
+            ethEl.innerHTML = `<span class="ticker-icon">Ξ</span><span>$${data.ethereum.usd.toLocaleString()}</span>`;
+        } catch {
+            // Fallback prices
+            btcEl.innerHTML = '<span class="ticker-icon">₿</span><span>$97,450</span>';
+            ethEl.innerHTML = '<span class="ticker-icon">Ξ</span><span>$3,280</span>';
+        }
     } catch (e) {
         console.log('Price fetch error:', e);
     }
@@ -379,11 +537,15 @@ function incrementStat(type) {
 }
 
 // ===== Toast Notification =====
-function showToast(message) {
+function showToast(message, isError = false) {
     const toast = document.getElementById('toast');
     toast.querySelector('.toast-message').textContent = message;
+    toast.style.background = isError ? 'linear-gradient(135deg, #ef4444, #dc2626)' : '';
     toast.classList.add('show');
-    setTimeout(() => toast.classList.remove('show'), 2500);
+    setTimeout(() => {
+        toast.classList.remove('show');
+        toast.style.background = '';
+    }, 3000);
 }
 
 // ===== Copy to Clipboard =====
@@ -397,6 +559,8 @@ function copyToClipboard(text) {
 function initDashboard() {
     updateStats();
     renderRecentContent();
+    setupApiKeyInput();
+    updateApiStatus();
 
     document.querySelectorAll('.quick-btn').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -405,6 +569,44 @@ function initDashboard() {
             navigateToSection(sectionMap[action]);
         });
     });
+}
+
+function setupApiKeyInput() {
+    const saveBtn = document.getElementById('saveApiKey');
+    const input = document.getElementById('apiKeyInput');
+
+    if (!saveBtn || !input) return;
+
+    input.value = AppState.apiKey;
+
+    saveBtn.addEventListener('click', () => {
+        const key = input.value.trim();
+        if (key) {
+            AppState.apiKey = key;
+            localStorage.setItem('cryptox_api_key', key);
+            updateApiStatus();
+            showToast('API key saved successfully!');
+        } else {
+            showToast('Please enter a valid API key', true);
+        }
+    });
+}
+
+function updateApiStatus() {
+    const statusEl = document.getElementById('apiStatus');
+    if (!statusEl) return;
+
+    const dot = statusEl.querySelector('.status-dot');
+    const text = statusEl.querySelector('.status-text');
+
+    if (AppState.apiKey) {
+        dot.style.background = '#22c55e';
+        text.textContent = 'API key configured ✓';
+        document.getElementById('apiSetupCard')?.classList.add('configured');
+    } else {
+        dot.style.background = '#ef4444';
+        text.textContent = 'No API key configured';
+    }
 }
 
 function renderRecentContent() {
@@ -447,40 +649,65 @@ function initGenerator() {
     document.getElementById('scheduleContentBtn').addEventListener('click', openScheduleModal);
 }
 
-function generateContent() {
+async function generateContent() {
     const topic = document.getElementById('topicInput').value || 'Bitcoin';
     const tone = document.getElementById('toneSelect').value;
     const context = document.getElementById('contextInput').value;
-
-    let templates;
-    switch (tone) {
-        case 'bullish': templates = ContentTemplates.bullishTweet; break;
-        case 'educational': templates = ContentTemplates.educationalTweet; break;
-        case 'analytical': templates = ContentTemplates.analyticalTweet; break;
-        case 'news': templates = ContentTemplates.newsTweet; break;
-        case 'controversial': templates = ContentTemplates.controversialTweet; break;
-        case 'humorous': templates = ContentTemplates.humorousTweet; break;
-        default: templates = ContentTemplates.bullishTweet;
-    }
-
-    let content = templates[Math.floor(Math.random() * templates.length)];
-    content = content.replace(/{coin}/g, topic).replace(/{topic}/g, topic);
-
-    if (context) {
-        content += `\n\n${context}`;
-    }
-
-    AppState.generatedContent = content;
-
     const outputEl = document.getElementById('generatedContent');
-    outputEl.textContent = content;
+    const generateBtn = document.getElementById('generateBtn');
 
-    const charCount = document.getElementById('charCount');
-    charCount.textContent = content.length;
-    charCount.style.color = content.length > 280 ? '#ef4444' : '';
+    // Show loading state
+    outputEl.innerHTML = '<div class="loading-state"><div class="spinner"></div><p>Generating viral content...</p></div>';
+    generateBtn.disabled = true;
+    generateBtn.innerHTML = '<span>⏳</span><span>Generating...</span>';
 
-    document.getElementById('outputFooter').style.display = 'flex';
-    incrementStat('posts');
+    try {
+        let content;
+
+        if (AppState.apiKey) {
+            // Use Gemini API
+            const prompt = ContentPrompts[tone] ? ContentPrompts[tone](topic, context) : ContentPrompts.bullish(topic, context);
+            content = await callGeminiAPI(prompt);
+            // Clean up the response
+            content = content.replace(/```/g, '').trim();
+        } else {
+            // Use fallback templates
+            const toneMap = {
+                bullish: ContentTemplates.bullishTweet,
+                educational: ContentTemplates.educationalTweet,
+                analytical: ContentTemplates.analyticalTweet,
+                news: ContentTemplates.newsTweet,
+                controversial: ContentTemplates.controverseMewet,
+                humorous: ContentTemplates.humorousTweet
+            };
+
+            const templates = toneMap[tone] || ContentTemplates.bullishTweet;
+            content = templates[Math.floor(Math.random() * templates.length)];
+            content = content.replace(/{coin}/g, topic).replace(/{topic}/g, topic);
+
+            if (context) {
+                content += `\n\n${context}`;
+            }
+        }
+
+        AppState.generatedContent = content;
+        outputEl.textContent = content;
+
+        const charCount = document.getElementById('charCount');
+        charCount.textContent = content.length;
+        charCount.style.color = content.length > 280 ? '#ef4444' : '';
+
+        document.getElementById('outputFooter').style.display = 'flex';
+        incrementStat('posts');
+
+    } catch (error) {
+        console.error('Generation error:', error);
+        outputEl.innerHTML = `<div class="error-state"><span class="error-icon">❌</span><p>Error: ${error.message}</p><small>Check your API key or try again</small></div>`;
+        showToast(error.message, true);
+    } finally {
+        generateBtn.disabled = false;
+        generateBtn.innerHTML = '<span>✨</span><span>Generate Content</span>';
+    }
 }
 
 function saveGeneratedContent() {
@@ -505,34 +732,57 @@ function initThreadBuilder() {
     document.getElementById('saveThread')?.addEventListener('click', saveThread);
 }
 
-function generateThread() {
+async function generateThread() {
     const topic = document.getElementById('threadTopic').value || 'Why Crypto Will Change Everything';
     const length = parseInt(document.getElementById('threadLength').value);
-
-    const threadTweets = [
-        `🧵 ${topic}\n\nA thread on what most people are getting wrong:\n\n(Save this for later)`,
-        `1/ Let's start with the basics.\n\nMost people think they understand ${topic.split(' ')[0]}, but they only see the surface.\n\nHere's what's really happening...`,
-        `2/ The first thing to understand:\n\nThis isn't about short-term gains.\n\nIt's about a fundamental shift in how the world works.`,
-        `3/ Here's what the data shows:\n\n📈 Adoption is accelerating\n💰 Institutions are entering\n🌍 Global interest is rising\n\nThe trend is undeniable.`,
-        `4/ But here's what nobody talks about:\n\nThe technology is evolving faster than most realize.\n\nBy the time mainstream catches on, early adopters will be years ahead.`,
-        `5/ My prediction:\n\nIn the next 2-3 years, we'll see:\n\n• Mass adoption\n• Regulatory clarity\n• New use cases we can't imagine\n\nGet positioned now.`,
-        `6/ What you should do:\n\n✅ Educate yourself\n✅ Start small\n✅ Think long-term\n✅ Don't panic sell\n\nPatience is the key.`,
-        `7/ Final thoughts:\n\nWe're still early.\n\nThe opportunity is massive for those who take action.\n\nIf you found this valuable:\n• Like this thread\n• Follow me for more\n• Retweet to help others`,
-        `That's a wrap!\n\nIf you enjoyed this thread, you'll love my other content.\n\nFollow for daily crypto insights 🚀\n\n@YourHandle`,
-        `BONUS:\n\nHere's my top resource for learning more about ${topic}:\n\n[Resource/Link]\n\nBookmark this thread for reference 📚`
-    ];
-
     const preview = document.getElementById('threadPreview');
-    preview.innerHTML = threadTweets.slice(0, length).map((tweet, i) => `
-        <div class="thread-tweet">
-            <span class="tweet-number">${i + 1}</span>
-            <button class="tweet-copy" onclick="copyToClipboard(\`${tweet.replace(/`/g, "'")}\`)">Copy</button>
-            <div class="tweet-content">${tweet}</div>
-        </div>
-    `).join('');
+    const generateBtn = document.getElementById('generateThread');
 
-    document.getElementById('threadActions').style.display = 'flex';
-    incrementStat('threads');
+    // Show loading
+    preview.innerHTML = '<div class="loading-state"><div class="spinner"></div><p>Generating thread with AI...</p></div>';
+    generateBtn.disabled = true;
+
+    try {
+        let threadTweets;
+
+        if (AppState.apiKey) {
+            // Use Gemini API
+            const prompt = ThreadPrompts.generate(topic, length);
+            const response = await callGeminiAPI(prompt);
+            threadTweets = response.split('---TWEET---').map(t => t.trim()).filter(t => t);
+        } else {
+            // Fallback templates
+            threadTweets = [
+                `🧵 ${topic}\n\nA thread on what most people are getting wrong:\n\n(Save this for later)`,
+                `1/ Let's start with the basics.\n\nMost people think they understand ${topic.split(' ')[0]}, but they only see the surface.\n\nHere's what's really happening...`,
+                `2/ The first thing to understand:\n\nThis isn't about short-term gains.\n\nIt's about a fundamental shift in how the world works.`,
+                `3/ Here's what the data shows:\n\n📈 Adoption is accelerating\n💰 Institutions are entering\n🌍 Global interest is rising\n\nThe trend is undeniable.`,
+                `4/ But here's what nobody talks about:\n\nThe technology is evolving faster than most realize.\n\nBy the time mainstream catches on, early adopters will be years ahead.`,
+                `5/ My prediction:\n\nIn the next 2-3 years, we'll see:\n\n• Mass adoption\n• Regulatory clarity\n• New use cases we can't imagine\n\nGet positioned now.`,
+                `6/ What you should do:\n\n✅ Educate yourself\n✅ Start small\n✅ Think long-term\n✅ Don't panic sell\n\nPatience is the key.`,
+                `7/ Final thoughts:\n\nWe're still early.\n\nThe opportunity is massive for those who take action.\n\nIf you found this valuable:\n• Like this thread\n• Follow me for more\n• Retweet to help others`,
+                `That's a wrap!\n\nIf you enjoyed this thread, you'll love my other content.\n\nFollow for daily crypto insights 🚀\n\n@YourHandle`,
+                `BONUS:\n\nHere's my top resource for learning more about ${topic}:\n\n[Resource/Link]\n\nBookmark this thread for reference 📚`
+            ];
+        }
+
+        preview.innerHTML = threadTweets.slice(0, length).map((tweet, i) => `
+            <div class="thread-tweet">
+                <span class="tweet-number">${i + 1}</span>
+                <button class="tweet-copy" onclick="copyToClipboard(\`${tweet.replace(/`/g, "'")}\`)">Copy</button>
+                <div class="tweet-content">${tweet}</div>
+            </div>
+        `).join('');
+
+        document.getElementById('threadActions').style.display = 'flex';
+        incrementStat('threads');
+
+    } catch (error) {
+        preview.innerHTML = `<div class="error-state"><span class="error-icon">❌</span><p>Error: ${error.message}</p></div>`;
+        showToast(error.message, true);
+    } finally {
+        generateBtn.disabled = false;
+    }
 }
 
 function copyEntireThread() {
@@ -593,7 +843,7 @@ function addScheduledPost() {
     const time = document.getElementById('scheduleTime').value;
 
     if (!content) {
-        showToast('Please enter content');
+        showToast('Please enter content', true);
         return;
     }
 
@@ -725,47 +975,69 @@ function initReplies() {
     document.getElementById('generateReply').addEventListener('click', generateReplies);
 }
 
-function generateReplies() {
+async function generateReplies() {
     const original = document.getElementById('originalTweet').value;
     const style = document.getElementById('replyStyle').value;
+    const container = document.getElementById('replySuggestions');
+    const generateBtn = document.getElementById('generateReply');
 
     if (!original) {
-        showToast('Please paste the original tweet');
+        showToast('Please paste the original tweet', true);
         return;
     }
 
-    const replyTemplates = {
-        agree: [
-            "100% this. Most people underestimate how important this is.",
-            "Couldn't agree more. Been saying this for months.",
-            "This is the way. More people need to understand this."
-        ],
-        question: [
-            "Interesting perspective. What do you think about the long-term implications?",
-            "Great point. But have you considered...?",
-            "This makes sense. How do you see this evolving in 2025?"
-        ],
-        insight: [
-            "Adding to this: the data actually shows...",
-            "Great thread. One thing I'd add is...",
-            "This is spot on. From my experience, I've also noticed..."
-        ],
-        humor: [
-            "My portfolio after reading this: 📈📈📈 (for 5 minutes) 📉📉📉",
-            "Instructions unclear. Bought more Bitcoin.",
-            "This is the alpha I needed at 3am. My sleep schedule thanks you."
-        ]
-    };
+    // Show loading
+    container.innerHTML = '<div class="loading-state"><div class="spinner"></div><p>Generating smart replies...</p></div>';
+    generateBtn.disabled = true;
 
-    const replies = replyTemplates[style];
-    const container = document.getElementById('replySuggestions');
+    try {
+        let replies;
 
-    container.innerHTML = replies.map(reply => `
-        <div class="reply-option">
-            <div class="reply-text">${reply}</div>
-            <button class="reply-copy" onclick="copyToClipboard('${reply}')">📋 Copy Reply</button>
-        </div>
-    `).join('');
+        if (AppState.apiKey) {
+            // Use Gemini API
+            const prompt = ReplyPrompts[style](original);
+            const response = await callGeminiAPI(prompt);
+            replies = response.split('---REPLY---').map(r => r.trim()).filter(r => r);
+        } else {
+            // Fallback templates
+            const replyTemplates = {
+                agree: [
+                    "100% this. Most people underestimate how important this is.",
+                    "Couldn't agree more. Been saying this for months.",
+                    "This is the way. More people need to understand this."
+                ],
+                question: [
+                    "Interesting perspective. What do you think about the long-term implications?",
+                    "Great point. But have you considered...?",
+                    "This makes sense. How do you see this evolving in 2025?"
+                ],
+                insight: [
+                    "Adding to this: the data actually shows...",
+                    "Great thread. One thing I'd add is...",
+                    "This is spot on. From my experience, I've also noticed..."
+                ],
+                humor: [
+                    "My portfolio after reading this: 📈📈📈 (for 5 minutes) 📉📉📉",
+                    "Instructions unclear. Bought more Bitcoin.",
+                    "This is the alpha I needed at 3am. My sleep schedule thanks you."
+                ]
+            };
+            replies = replyTemplates[style];
+        }
+
+        container.innerHTML = replies.map(reply => `
+            <div class="reply-option">
+                <div class="reply-text">${reply}</div>
+                <button class="reply-copy" onclick="copyToClipboard('${reply.replace(/'/g, "\\'")}')">📋 Copy Reply</button>
+            </div>
+        `).join('');
+
+    } catch (error) {
+        container.innerHTML = `<div class="error-state"><span class="error-icon">❌</span><p>Error: ${error.message}</p></div>`;
+        showToast(error.message, true);
+    } finally {
+        generateBtn.disabled = false;
+    }
 }
 
 // ===== Schedule Modal =====
